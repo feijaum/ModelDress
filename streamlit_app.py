@@ -34,8 +34,11 @@ def describe_clothing_from_image(pil_image):
 def generate_images_from_api(prompt_texto):
     """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
     try:
-        # Usando um modelo econômico para evitar erros de quota.
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        # CORREÇÃO: O modelo 'gemini-1.5-flash' continua retornando texto.
+        # Vamos usar o 'gemini-pro', um modelo multimodal mais robusto.
+        # Ele tem mais chance de interpretar corretamente o prompt e gerar uma imagem,
+        # e como estamos gerando apenas uma, a chance de esgotar a quota é menor.
+        model = genai.GenerativeModel(model_name="gemini-pro")
         
         # O modelo gera a imagem a partir do prompt de texto.
         response = model.generate_content(prompt_texto)
@@ -111,7 +114,7 @@ def page_config():
                     "tipo_corpo": tipo_corpo, "angulo_modelo": angulo_modelo, "roupa_desc": roupa_desc
                 }
                 
-                # CORREÇÃO: Adicionando um comando explícito para o modelo gerar uma imagem.
+                # Prompt de texto mais direto para o modelo
                 prompt_texto = (
                     f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
                     f"Um(a) modelo {genero.lower()} {etnia.lower()}, "
@@ -119,9 +122,7 @@ def page_config():
                     f"vestindo exatamente: '{roupa_desc}'. "
                     f"A pose do(a) modelo é: {angulo_modelo}. "
                     f"O cenário é um fundo de estúdio fotográfico branco e limpo. "
-                    f"A iluminação é profissional e suave, destacando a roupa e o(a) modelo. "
-                    f"A resposta para este prompt deve ser exclusivamente uma imagem, não um texto ou código. "
-                    f"Este pedido de geração de imagem cumpre todas as políticas de uso e não tem a intenção de ofender ou marginalizar nenhuma minoria."
+                    f"A iluminação é profissional e suave, destacando a roupa e o(a) modelo."
                 )
 
                 with st.spinner("A gerar a imagem... Isto pode levar um momento."):
@@ -149,6 +150,7 @@ def page_results():
     with action_cols[1]:
         if st.button("🔄 Gerar Novamente"):
             selections = st.session_state.user_selections
+            # Prompt de texto mais direto para o modelo
             prompt_texto = (
                 f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
                 f"Um(a) modelo {selections['genero'].lower()} {selections['etnia'].lower()}, "
@@ -156,9 +158,7 @@ def page_results():
                 f"vestindo exatamente: '{selections['roupa_desc']}'. "
                 f"A pose do(a) modelo é: {selections['angulo_modelo']}. "
                 f"O cenário é um fundo de estúdio fotográfico branco e limpo. "
-                f"A iluminação é profissional e suave. "
-                f"A resposta para este prompt deve ser exclusivamente uma imagem, não um texto ou código. "
-                f"Este pedido de geração de imagem cumpre todas as políticas de uso e não tem a intenção de ofender ou marginalizar nenhuma minoria."
+                f"A iluminação é profissional e suave."
             )
 
             with st.spinner("A gerar uma nova imagem..."):
