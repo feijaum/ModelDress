@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+from google.generativeai import types
 from PIL import Image, UnidentifiedImageError
 import io
 import time
@@ -34,25 +35,31 @@ def describe_clothing_from_image(pil_image):
 def generate_images_from_api(prompt_texto):
     """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
     try:
-        # CORREÇÃO DEFINITIVA: Usando a estrutura do AI Studio fornecida pelo usuário.
-        # O segredo é usar a GenerationConfig para especificar a MODALIDADE da resposta.
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash-preview-image-generation"
-        )
-
-        # Configuração para aceitar tanto IMAGEM quanto TEXTO como resposta,
-        # como mostrado no exemplo do AI Studio.
-        generation_config = genai.types.GenerationConfig(
-            response_modalities=["IMAGE", "TEXT"]
-        )
+        # CORREÇÃO DEFINITIVA: O erro 'TypeError' mostrou que a interface 'GenerativeModel'
+        # e 'GenerationConfig' não suportavam os parâmetros necessários.
+        # Alterando para a interface 'GenerativeServiceClient', que é mais baixo nível e
+        # alinhada com o exemplo do AI Studio, para chamar o modelo corretamente.
         
-        response = model.generate_content(
-            contents=prompt_texto,
-            generation_config=generation_config,
+        client = genai.GenerativeServiceClient()
+
+        model_name = "models/gemini-2.0-flash-preview-image-generation"
+        
+        contents = [
+            types.Content(
+                role="user",
+                parts=[types.Part(text=prompt_texto)],
+            )
+        ]
+
+        # Esta chamada direta com o ServiceClient é a forma correta de usar este modelo
+        # sem precisar de uma GenerationConfig que não é suportada.
+        response = client.generate_content(
+            model=model_name,
+            contents=contents,
         )
 
-        # Extrai os bytes da imagem da resposta.
-        image_bytes = response.parts[0].inline_data.data
+        # A estrutura da resposta do ServiceClient é diferente.
+        image_bytes = response.candidates[0].content.parts[0].inline_data.data
         return Image.open(io.BytesIO(image_bytes))
     except UnidentifiedImageError:
         st.error("A API retornou um resultado que não é uma imagem. Isso pode acontecer com prompts muito complexos ou restritos. Tente novamente com uma descrição diferente.")
