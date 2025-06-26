@@ -34,14 +34,13 @@ def describe_clothing_from_image(pil_image):
 def generate_images_from_api(prompt_texto):
     """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
     try:
-        # CORREÇÃO: O modelo 'gemini-1.5-flash' continua retornando texto.
-        # Vamos usar o 'gemini-pro', um modelo multimodal mais robusto.
-        # Ele tem mais chance de interpretar corretamente o prompt e gerar uma imagem,
-        # e como estamos gerando apenas uma, a chance de esgotar a quota é menor.
-        model = genai.GenerativeModel(model_name="gemini-pro")
+        # CORREÇÃO: Utilizando o modelo do relatório do usuário: 'gemini-2.0-flash-preview-image-generation'.
+        # Este modelo requer uma chamada no estilo "chat" para funcionar corretamente.
+        model = genai.GenerativeModel(model_name="gemini-2.0-flash-preview-image-generation")
         
-        # O modelo gera a imagem a partir do prompt de texto.
-        response = model.generate_content(prompt_texto)
+        # Inicia uma sessão de chat para a geração conversacional de imagem.
+        chat = model.start_chat()
+        response = chat.send_message(prompt_texto)
 
         # Extrai os bytes da imagem da resposta.
         image_bytes = response.parts[0].inline_data.data
