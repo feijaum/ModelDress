@@ -16,7 +16,7 @@ if 'generated_image' not in st.session_state:
     st.session_state.generated_image = None
 if 'user_selections' not in st.session_state:
     st.session_state.user_selections = {}
-# Novos estados para lidar com erros de geração de imagem
+# Novos estados para lidar com erros de geração de imagem e sugestões
 if 'generation_error' not in st.session_state:
     st.session_state.generation_error = None
 if 'error_suggestion' not in st.session_state:
@@ -40,24 +40,24 @@ def describe_clothing_from_image(pil_image):
 def generate_images_from_api(prompt_texto):
     """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro" # Usando um modelo mais robusto para a geração de imagem
-        )
+        # Usando o modelo 'gemini-pro' que é robusto para multimodalidade.
+        model = genai.GenerativeModel(model_name="gemini-pro")
         
-        response = model.generate_content(
-            contents=prompt_texto
-        )
+        response = model.generate_content(contents=prompt_texto)
 
-        # Tenta extrair os dados da imagem
+        # Tenta extrair os dados da imagem. Se a API responder com texto, isto falhará.
         image_bytes = response.parts[0].inline_data.data
         return Image.open(io.BytesIO(image_bytes))
-    except UnidentifiedImageError:
-        # Se falhar (API retornou texto), retorna a mensagem de texto do erro.
-        return response.text
+    except (UnidentifiedImageError, IndexError, AttributeError):
+        # Se a extração falhar, é porque a API retornou texto (provavelmente um erro/recusa).
+        # Retornamos o texto para análise.
+        try:
+            return response.text
+        except Exception:
+            return "A API retornou uma resposta inesperada que não é uma imagem nem texto de erro legível."
     except Exception as e:
-        st.error(f"Ocorreu um erro crítico na API de Geração de Imagem: {e}")
-        st.exception(e)
-        return None
+        # Captura outros erros críticos (ex: quota, conexão)
+        return f"Ocorreu um erro crítico na API de Geração de Imagem: {e}"
 
 # --- FUNÇÃO IA Nº 3: Sugestão de Correção de Prompt ---
 def get_prompt_correction(original_prompt, error_message):
@@ -69,7 +69,7 @@ def get_prompt_correction(original_prompt, error_message):
             f"A mensagem de erro recebida foi: '{error_message}'.\n\n"
             "Analise o prompt e o erro. Reescreva o prompt para corrigir o problema, "
             "tornando-o mais provável de gerar uma imagem com sucesso. "
-            "A resposta deve ser apenas o prompt corrigido, sem nenhum texto adicional."
+            "A resposta deve ser apenas o prompt corrigido, sem nenhum texto adicional ou explicações."
         )
         response = model.generate_content(correction_prompt)
         return response.text
@@ -133,14 +133,13 @@ def page_config():
                     st.session_state.generation_error = None
                     st.session_state.error_suggestion = None
                     with st.spinner("Tentando novamente com o prompt corrigido..."):
-                        img = generate_images_from_api(corrected_prompt)
-                        if isinstance(img, Image.Image):
-                            st.session_state.generated_image = img
+                        result = generate_images_from_api(corrected_prompt)
+                        if isinstance(result, Image.Image):
+                            st.session_state.generated_image = result
                             st.session_state.page = 'results'
-                            st.rerun()
                         else: # Se falhar novamente
-                            st.session_state.generation_error = img or "Falha desconhecida na nova tentativa."
-                            st.rerun()
+                            st.session_state.generation_error = result or "Falha desconhecida na nova tentativa."
+                        st.rerun()
 
             with error_cols[1]:
                 if st.button("Cancelar"):
@@ -150,9 +149,11 @@ def page_config():
     else:
         st.info("A aguardar o envio da foto da roupa e o comando para gerar...")
 
-
+    # --- LÓGICA DE GERAÇÃO ---
     if gerar_imagem_btn:
-        if not uploaded_file:
+        if st.session_state.generation_error: # Não fazer nada se já houver um erro a ser tratado
+            pass
+        elif not uploaded_file:
             st.error("Por favor, envie a imagem de uma peça de roupa antes de gerar o modelo.")
         else:
             roupa_desc = None
@@ -184,12 +185,11 @@ def page_config():
                     if isinstance(result, Image.Image):
                         st.session_state.generated_image = result
                         st.session_state.page = 'results'
-                        st.rerun()
                     else: # Se o resultado for texto (erro)
                         st.session_state.generation_error = result
                         with st.spinner("Analisando o erro e gerando uma sugestão..."):
                             st.session_state.error_suggestion = get_prompt_correction(prompt_texto, result)
-                        st.rerun()
+                    st.rerun()
 
 
 # --- PÁGINA 2: RESULTADOS ---
@@ -208,26 +208,8 @@ def page_results():
             
     with action_cols[1]:
         if st.button("🔄 Gerar Novamente"):
-            selections = st.session_state.user_selections
-            prompt_texto = (
-                f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
-                f"Um(a) modelo {selections['genero'].lower()} {selections['etnia'].lower()}, "
-                f"com idade aparente de {selections['faixa_etaria'].lower()} e corpo {selections['tipo_corpo'].lower()}, "
-                f"vestindo exatamente: '{selections['roupa_desc']}'. "
-                f"A pose do(a) modelo é: {selections['angulo_modelo']}. "
-                f"O cenário é um fundo de estúdio fotográfico branco e limpo. "
-                f"A iluminação é profissional e suave."
-            )
-
-            with st.spinner("A gerar uma nova imagem..."):
-                img = generate_images_from_api(prompt_texto)
-                if isinstance(img, Image.Image):
-                    st.session_state.generated_image = img
-                    st.rerun()
-                else:
-                    st.session_state.generation_error = img
-                    st.session_state.page = 'config' # Volta para a pág. de config para mostrar o erro
-                    st.rerun()
+            st.session_state.page = 'config' # Volta para a pág. de config para gerar com as mesmas opções
+            st.rerun()
 
 
     st.write("---")
