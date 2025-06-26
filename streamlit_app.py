@@ -15,7 +15,8 @@ if 'prompt_text' not in st.session_state:
 def describe_clothing_from_image(pil_image):
     """Usa o Gemini para analisar uma imagem e descrever a roupa."""
     try:
-        # Usando um modelo eficiente para análise de imagem
+        # CORREÇÃO: Voltando para o 'gemini-1.5-flash'. Ele estava funcional
+        # antes de esgotar a quota devido aos testes. É a opção mais estável.
         model = genai.GenerativeModel(model_name="gemini-1.5-flash")
         prompt = "Você é um especialista em moda. Descreva esta peça de roupa em detalhes para ser usada como prompt em um gerador de imagens. Foque no tipo da peça, cor, estilo, tecido, corte e quaisquer estampas ou detalhes visíveis. Seja conciso e direto."
         response = model.generate_content([prompt, pil_image])
@@ -97,7 +98,7 @@ def main_app():
         st.subheader("✅ Prompt Gerado com Sucesso!")
         
         # Exibe o prompt em uma área de texto
-        st.text_area("Prompt:", value=st.session_state.prompt_text, height=200)
+        st.text_area("Prompt:", value=st.session_state.prompt_text, height=200, key="prompt_output")
 
         # HTML e JavaScript para o botão de copiar
         # Usamos document.execCommand que é mais compatível em iframes do que navigator.clipboard
@@ -123,7 +124,7 @@ def main_app():
         </script>
         <button id="copyBtn" onclick="copyToClipboard()">Copiar Prompt</button>
         """
-        st.markdown(js_code, unsafe_allow_html=True)
+        st.components.v1.html(js_code, height=40)
 
 
 if __name__ == "__main__":
