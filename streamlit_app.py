@@ -16,6 +16,11 @@ if 'generated_image' not in st.session_state:
     st.session_state.generated_image = None
 if 'user_selections' not in st.session_state:
     st.session_state.user_selections = {}
+# Novos estados para lidar com erros de geração de imagem
+if 'generation_error' not in st.session_state:
+    st.session_state.generation_error = None
+if 'error_suggestion' not in st.session_state:
+    st.session_state.error_suggestion = None
 
 
 # --- FUNÇÃO IA Nº 1: Análise de Imagem para Texto ---
@@ -35,35 +40,42 @@ def describe_clothing_from_image(pil_image):
 def generate_images_from_api(prompt_texto):
     """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
     try:
-        # CORREÇÃO DEFINITIVA: O erro 'AttributeError' foi corrigido.
-        # Voltando a usar o 'GenerativeModel' com a configuração correta,
-        # passada como um dicionário para evitar o 'TypeError' anterior.
-        
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash-preview-image-generation"
+            model_name="gemini-1.5-pro" # Usando um modelo mais robusto para a geração de imagem
         )
-        
-        # Passando a configuração como um dicionário para replicar o comportamento
-        # do AI Studio e solicitar uma imagem como resposta.
-        generation_config = {
-            "response_modalities": ["IMAGE", "TEXT"],
-        }
         
         response = model.generate_content(
-            contents=prompt_texto,
-            generation_config=generation_config,
+            contents=prompt_texto
         )
 
-        # A estrutura da resposta do ServiceClient é diferente.
-        image_bytes = response.candidates[0].content.parts[0].inline_data.data
+        # Tenta extrair os dados da imagem
+        image_bytes = response.parts[0].inline_data.data
         return Image.open(io.BytesIO(image_bytes))
     except UnidentifiedImageError:
-        st.error("A API retornou um resultado que não é uma imagem. Isso pode acontecer com prompts muito complexos ou restritos. Tente novamente com uma descrição diferente.")
-        return None
+        # Se falhar (API retornou texto), retorna a mensagem de texto do erro.
+        return response.text
     except Exception as e:
-        st.error(f"Ocorreu um erro na API de Geração de Imagem: {e}")
+        st.error(f"Ocorreu um erro crítico na API de Geração de Imagem: {e}")
         st.exception(e)
         return None
+
+# --- FUNÇÃO IA Nº 3: Sugestão de Correção de Prompt ---
+def get_prompt_correction(original_prompt, error_message):
+    """Usa o Gemini para analisar um prompt e um erro, e sugerir uma correção."""
+    try:
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        correction_prompt = (
+            f"O seguinte prompt para um gerador de imagens falhou: '{original_prompt}'.\n"
+            f"A mensagem de erro recebida foi: '{error_message}'.\n\n"
+            "Analise o prompt e o erro. Reescreva o prompt para corrigir o problema, "
+            "tornando-o mais provável de gerar uma imagem com sucesso. "
+            "A resposta deve ser apenas o prompt corrigido, sem nenhum texto adicional."
+        )
+        response = model.generate_content(correction_prompt)
+        return response.text
+    except Exception as e:
+        return f"Não foi possível gerar uma sugestão de correção. Erro: {e}"
+
 
 # --- PÁGINA 1: CONFIGURAÇÃO ---
 def page_config():
@@ -85,11 +97,11 @@ def page_config():
 
     # --- Opções do Menu ---
     st.sidebar.header("Características do Modelo")
-    faixa_etaria = st.sidebar.selectbox("Faixa Etária:", ("Adolescente", "Jovem Adulto", "Adulto", "Idoso"))
-    genero = st.sidebar.selectbox("Gênero:", ("Feminino", "Masculino"))
-    etnia = st.sidebar.selectbox("Etnia:", ("Branco(a)", "Negro(a)", "Asiático(a)", "Indígena", "Pardo(a)"))
-    tipo_corpo = st.sidebar.selectbox("Tipo de Corpo:", ("Plus Size", "Wellness (Padrão)", "Atleta", "Magro(a)"))
-    angulo_modelo = st.sidebar.selectbox("Ângulo do Modelo:", ("De frente, a olhar para a câmara", "De perfil, 3/4", "Meio de costas"))
+    faixa_etaria = st.sidebar.selectbox("Faixa Etária:", ("Adolescente", "Jovem Adulto", "Adulto", "Idoso"), key="age")
+    genero = st.sidebar.selectbox("Gênero:", ("Feminino", "Masculino"), key="gender")
+    etnia = st.sidebar.selectbox("Etnia:", ("Branco(a)", "Negro(a)", "Asiático(a)", "Indígena", "Pardo(a)"), key="ethnicity")
+    tipo_corpo = st.sidebar.selectbox("Tipo de Corpo:", ("Plus Size", "Wellness (Padrão)", "Atleta", "Magro(a)"), key="body_type")
+    angulo_modelo = st.sidebar.selectbox("Ângulo do Modelo:", ("De frente, a olhar para a câmara", "De perfil, 3/4", "Meio de costas"), key="angle")
 
     st.sidebar.write("---")
 
@@ -106,7 +118,38 @@ def page_config():
     # --- Conteúdo da Página Principal ---
     st.title("👕 Provador Virtual com IA Dupla 👖")
     st.markdown("Use o menu ao lado para enviar uma foto da roupa, configurar o modelo e deixar a IA trabalhar.")
-    st.info("A aguardar o envio da foto da roupa e o comando para gerar...")
+    
+    # --- LÓGICA DE ERRO E SUGESTÃO ---
+    if st.session_state.generation_error:
+        st.error(f"**A API não gerou uma imagem e respondeu com o seguinte texto:**\n\n`{st.session_state.generation_error}`")
+        if st.session_state.error_suggestion:
+            st.warning(f"**Sugestão do Gemini para corrigir o prompt:**\n\n`{st.session_state.error_suggestion}`")
+            
+            error_cols = st.columns(2)
+            with error_cols[0]:
+                if st.button("Corrigir e Tentar Novamente", type="primary"):
+                    corrected_prompt = st.session_state.error_suggestion
+                    # Limpa os estados de erro antes de tentar novamente
+                    st.session_state.generation_error = None
+                    st.session_state.error_suggestion = None
+                    with st.spinner("Tentando novamente com o prompt corrigido..."):
+                        img = generate_images_from_api(corrected_prompt)
+                        if isinstance(img, Image.Image):
+                            st.session_state.generated_image = img
+                            st.session_state.page = 'results'
+                            st.rerun()
+                        else: # Se falhar novamente
+                            st.session_state.generation_error = img or "Falha desconhecida na nova tentativa."
+                            st.rerun()
+
+            with error_cols[1]:
+                if st.button("Cancelar"):
+                    st.session_state.generation_error = None
+                    st.session_state.error_suggestion = None
+                    st.rerun()
+    else:
+        st.info("A aguardar o envio da foto da roupa e o comando para gerar...")
+
 
     if gerar_imagem_btn:
         if not uploaded_file:
@@ -125,7 +168,6 @@ def page_config():
                     "tipo_corpo": tipo_corpo, "angulo_modelo": angulo_modelo, "roupa_desc": roupa_desc
                 }
                 
-                # Prompt de texto mais direto para o modelo
                 prompt_texto = (
                     f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
                     f"Um(a) modelo {genero.lower()} {etnia.lower()}, "
@@ -137,12 +179,18 @@ def page_config():
                 )
 
                 with st.spinner("A gerar a imagem... Isto pode levar um momento."):
-                    img = generate_images_from_api(prompt_texto)
-                    st.session_state.generated_image = img
+                    result = generate_images_from_api(prompt_texto)
 
-                if st.session_state.generated_image:
-                    st.session_state.page = 'results'
-                    st.rerun() 
+                    if isinstance(result, Image.Image):
+                        st.session_state.generated_image = result
+                        st.session_state.page = 'results'
+                        st.rerun()
+                    else: # Se o resultado for texto (erro)
+                        st.session_state.generation_error = result
+                        with st.spinner("Analisando o erro e gerando uma sugestão..."):
+                            st.session_state.error_suggestion = get_prompt_correction(prompt_texto, result)
+                        st.rerun()
+
 
 # --- PÁGINA 2: RESULTADOS ---
 def page_results():
@@ -161,7 +209,6 @@ def page_results():
     with action_cols[1]:
         if st.button("🔄 Gerar Novamente"):
             selections = st.session_state.user_selections
-            # Prompt de texto mais direto para o modelo
             prompt_texto = (
                 f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
                 f"Um(a) modelo {selections['genero'].lower()} {selections['etnia'].lower()}, "
@@ -174,8 +221,14 @@ def page_results():
 
             with st.spinner("A gerar uma nova imagem..."):
                 img = generate_images_from_api(prompt_texto)
-                st.session_state.generated_image = img
-                st.rerun()
+                if isinstance(img, Image.Image):
+                    st.session_state.generated_image = img
+                    st.rerun()
+                else:
+                    st.session_state.generation_error = img
+                    st.session_state.page = 'config' # Volta para a pág. de config para mostrar o erro
+                    st.rerun()
+
 
     st.write("---")
 
