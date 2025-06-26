@@ -35,27 +35,23 @@ def describe_clothing_from_image(pil_image):
 def generate_images_from_api(prompt_texto):
     """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
     try:
-        # CORREÇÃO DEFINITIVA: O erro 'TypeError' mostrou que a interface 'GenerativeModel'
-        # e 'GenerationConfig' não suportavam os parâmetros necessários.
-        # Alterando para a interface 'GenerativeServiceClient', que é mais baixo nível e
-        # alinhada com o exemplo do AI Studio, para chamar o modelo corretamente.
+        # CORREÇÃO DEFINITIVA: O erro 'AttributeError' foi corrigido.
+        # Voltando a usar o 'GenerativeModel' com a configuração correta,
+        # passada como um dicionário para evitar o 'TypeError' anterior.
         
-        client = genai.GenerativeServiceClient()
-
-        model_name = "models/gemini-2.0-flash-preview-image-generation"
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash-preview-image-generation"
+        )
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part(text=prompt_texto)],
-            )
-        ]
-
-        # Esta chamada direta com o ServiceClient é a forma correta de usar este modelo
-        # sem precisar de uma GenerationConfig que não é suportada.
-        response = client.generate_content(
-            model=model_name,
-            contents=contents,
+        # Passando a configuração como um dicionário para replicar o comportamento
+        # do AI Studio e solicitar uma imagem como resposta.
+        generation_config = {
+            "response_modalities": ["IMAGE", "TEXT"],
+        }
+        
+        response = model.generate_content(
+            contents=prompt_texto,
+            generation_config=generation_config,
         )
 
         # A estrutura da resposta do ServiceClient é diferente.
