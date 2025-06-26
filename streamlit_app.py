@@ -1,87 +1,34 @@
 import streamlit as st
 import google.generativeai as genai
-from google.generativeai import types
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 import io
-import time
 
 # --- Configuração da Página ---
-st.set_page_config(page_title="Provador Virtual IA", layout="wide")
+st.set_page_config(page_title="Gerador de Prompt para Provador Virtual", layout="wide")
 
 # --- Gerenciamento de Estado (Session State) ---
-# Inicializa o estado da página e outras variáveis se ainda não existirem.
-if 'page' not in st.session_state:
-    st.session_state.page = 'config'
-if 'generated_image' not in st.session_state: 
-    st.session_state.generated_image = None
-if 'user_selections' not in st.session_state:
-    st.session_state.user_selections = {}
-# Novos estados para lidar com erros de geração de imagem e sugestões
-if 'generation_error' not in st.session_state:
-    st.session_state.generation_error = None
-if 'error_suggestion' not in st.session_state:
-    st.session_state.error_suggestion = None
+# Inicializa o estado para armazenar o prompt gerado
+if 'prompt_text' not in st.session_state:
+    st.session_state.prompt_text = ""
 
-
-# --- FUNÇÃO IA Nº 1: Análise de Imagem para Texto ---
+# --- FUNÇÃO IA: Análise de Imagem para Texto ---
 def describe_clothing_from_image(pil_image):
-    """Usa o Gemini 1.5 Flash para analisar uma imagem e descrever a roupa."""
+    """Usa o Gemini para analisar uma imagem e descrever a roupa."""
     try:
+        # Usando um modelo eficiente para análise de imagem
         model = genai.GenerativeModel(model_name="gemini-1.5-flash")
         prompt = "Você é um especialista em moda. Descreva esta peça de roupa em detalhes para ser usada como prompt em um gerador de imagens. Foque no tipo da peça, cor, estilo, tecido, corte e quaisquer estampas ou detalhes visíveis. Seja conciso e direto."
         response = model.generate_content([prompt, pil_image])
         return response.text
     except Exception as e:
         st.error(f"Erro ao analisar a imagem da roupa: {e}")
-        st.exception(e)
         return None
 
-# --- FUNÇÃO IA Nº 2: Geração de Imagem a partir de Texto ---
-def generate_images_from_api(prompt_texto):
-    """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
-    try:
-        # Usando o modelo 'gemini-pro' que é robusto para multimodalidade.
-        model = genai.GenerativeModel(model_name="gemini-pro")
-        
-        response = model.generate_content(contents=prompt_texto)
-
-        # Tenta extrair os dados da imagem. Se a API responder com texto, isto falhará.
-        image_bytes = response.parts[0].inline_data.data
-        return Image.open(io.BytesIO(image_bytes))
-    except (UnidentifiedImageError, IndexError, AttributeError):
-        # Se a extração falhar, é porque a API retornou texto (provavelmente um erro/recusa).
-        # Retornamos o texto para análise.
-        try:
-            return response.text
-        except Exception:
-            return "A API retornou uma resposta inesperada que não é uma imagem nem texto de erro legível."
-    except Exception as e:
-        # Captura outros erros críticos (ex: quota, conexão)
-        return f"Ocorreu um erro crítico na API de Geração de Imagem: {e}"
-
-# --- FUNÇÃO IA Nº 3: Sugestão de Correção de Prompt ---
-def get_prompt_correction(original_prompt, error_message):
-    """Usa o Gemini para analisar um prompt e um erro, e sugerir uma correção."""
-    try:
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
-        correction_prompt = (
-            f"O seguinte prompt para um gerador de imagens falhou: '{original_prompt}'.\n"
-            f"A mensagem de erro recebida foi: '{error_message}'.\n\n"
-            "Analise o prompt e o erro. Reescreva o prompt para corrigir o problema, "
-            "tornando-o mais provável de gerar uma imagem com sucesso. "
-            "A resposta deve ser apenas o prompt corrigido, sem nenhum texto adicional ou explicações."
-        )
-        response = model.generate_content(correction_prompt)
-        return response.text
-    except Exception as e:
-        return f"Não foi possível gerar uma sugestão de correção. Erro: {e}"
-
-
-# --- PÁGINA 1: CONFIGURAÇÃO ---
-def page_config():
-    # --- Barra Lateral (Menu de Controlo da IA) ---
-    st.sidebar.title("🤖 Controlo do Provador Virtual")
-    st.sidebar.write("Configure as opções para gerar o modelo com a roupa desejada.")
+# --- Interface Principal da Aplicação ---
+def main_app():
+    # --- Barra Lateral (Menu de Controlo) ---
+    st.sidebar.title("🤖 Controlo do Gerador de Prompt")
+    st.sidebar.write("Configure as opções para gerar o prompt para o seu modelo.")
     st.sidebar.write("---")
 
     # --- Chave da API Gemini (Usando st.secrets para segurança) ---
@@ -113,48 +60,16 @@ def page_config():
     )
 
     st.sidebar.write("---")
-    gerar_imagem_btn = st.sidebar.button("✨ Vestir Modelo e Gerar Imagem")
+    gerar_prompt_btn = st.sidebar.button("✨ Gerar Prompt")
 
     # --- Conteúdo da Página Principal ---
-    st.title("👕 Provador Virtual com IA Dupla 👖")
-    st.markdown("Use o menu ao lado para enviar uma foto da roupa, configurar o modelo e deixar a IA trabalhar.")
-    
-    # --- LÓGICA DE ERRO E SUGESTÃO ---
-    if st.session_state.generation_error:
-        st.error(f"**A API não gerou uma imagem e respondeu com o seguinte texto:**\n\n`{st.session_state.generation_error}`")
-        if st.session_state.error_suggestion:
-            st.warning(f"**Sugestão do Gemini para corrigir o prompt:**\n\n`{st.session_state.error_suggestion}`")
-            
-            error_cols = st.columns(2)
-            with error_cols[0]:
-                if st.button("Corrigir e Tentar Novamente", type="primary"):
-                    corrected_prompt = st.session_state.error_suggestion
-                    # Limpa os estados de erro antes de tentar novamente
-                    st.session_state.generation_error = None
-                    st.session_state.error_suggestion = None
-                    with st.spinner("Tentando novamente com o prompt corrigido..."):
-                        result = generate_images_from_api(corrected_prompt)
-                        if isinstance(result, Image.Image):
-                            st.session_state.generated_image = result
-                            st.session_state.page = 'results'
-                        else: # Se falhar novamente
-                            st.session_state.generation_error = result or "Falha desconhecida na nova tentativa."
-                        st.rerun()
+    st.title("👕 Gerador de Prompt para Provador Virtual 👖")
+    st.markdown("Use o menu ao lado para enviar a foto da sua roupa, configurar o modelo e gerar um prompt detalhado para usar no seu gerador de imagens preferido (Gemini Pro, Flash, etc.).")
 
-            with error_cols[1]:
-                if st.button("Cancelar"):
-                    st.session_state.generation_error = None
-                    st.session_state.error_suggestion = None
-                    st.rerun()
-    else:
-        st.info("A aguardar o envio da foto da roupa e o comando para gerar...")
-
-    # --- LÓGICA DE GERAÇÃO ---
-    if gerar_imagem_btn:
-        if st.session_state.generation_error: # Não fazer nada se já houver um erro a ser tratado
-            pass
-        elif not uploaded_file:
-            st.error("Por favor, envie a imagem de uma peça de roupa antes de gerar o modelo.")
+    # --- LÓGICA DE GERAÇÃO DO PROMPT ---
+    if gerar_prompt_btn:
+        if not uploaded_file:
+            st.error("Por favor, envie a imagem de uma peça de roupa antes de gerar o prompt.")
         else:
             roupa_desc = None
             with st.spinner("Analisando a roupa com IA..."):
@@ -162,13 +77,9 @@ def page_config():
                 roupa_desc = describe_clothing_from_image(pil_image)
 
             if roupa_desc:
-                st.success(f"Descrição gerada pela IA: {roupa_desc}")
+                st.success("Descrição da roupa gerada pela IA!")
                 
-                st.session_state.user_selections = {
-                    "faixa_etaria": faixa_etaria, "genero": genero, "etnia": etnia,
-                    "tipo_corpo": tipo_corpo, "angulo_modelo": angulo_modelo, "roupa_desc": roupa_desc
-                }
-                
+                # Constrói o prompt final
                 prompt_texto = (
                     f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
                     f"Um(a) modelo {genero.lower()} {etnia.lower()}, "
@@ -178,68 +89,42 @@ def page_config():
                     f"O cenário é um fundo de estúdio fotográfico branco e limpo. "
                     f"A iluminação é profissional e suave, destacando a roupa e o(a) modelo."
                 )
+                st.session_state.prompt_text = prompt_texto
 
-                with st.spinner("A gerar a imagem... Isto pode levar um momento."):
-                    result = generate_images_from_api(prompt_texto)
-
-                    if isinstance(result, Image.Image):
-                        st.session_state.generated_image = result
-                        st.session_state.page = 'results'
-                    else: # Se o resultado for texto (erro)
-                        st.session_state.generation_error = result
-                        with st.spinner("Analisando o erro e gerando uma sugestão..."):
-                            st.session_state.error_suggestion = get_prompt_correction(prompt_texto, result)
-                    st.rerun()
-
-
-# --- PÁGINA 2: RESULTADOS ---
-def page_results():
-    st.title("🖼️ Imagem Gerada pela IA")
-    st.markdown("Veja o resultado gerado e pode tentar novamente se desejar.")
-    st.write("---")
-
-    # --- Botões de Ação ---
-    action_cols = st.columns([1, 1, 3])
-    with action_cols[0]:
-        if st.button("⬅️ Voltar"):
-            st.session_state.page = 'config'
-            st.session_state.generated_image = None
-            st.rerun()
-            
-    with action_cols[1]:
-        if st.button("🔄 Gerar Novamente"):
-            st.session_state.page = 'config' # Volta para a pág. de config para gerar com as mesmas opções
-            st.rerun()
-
-
-    st.write("---")
-
-    # --- Exibição da Imagem ---
-    if not st.session_state.generated_image:
-        st.warning("Nenhuma imagem foi gerada ou ocorreu um erro. Por favor, volte e tente novamente.")
-        return
-
-    # Exibe a imagem única dentro de um container (caixa) com borda.
-    with st.container(border=True):
-        st.image(st.session_state.generated_image, caption="Modelo Gerado", use_column_width=True)
-
-        img_bytes = io.BytesIO()
-        st.session_state.generated_image.save(img_bytes, format="PNG")
+    # --- EXIBIÇÃO DO PROMPT E BOTÃO DE COPIAR ---
+    if st.session_state.prompt_text:
+        st.write("---")
+        st.subheader("✅ Prompt Gerado com Sucesso!")
         
-        st.download_button(
-            label="💾 Guardar Imagem",
-            data=img_bytes.getvalue(),
-            file_name="modelo_gerado.png",
-            mime="image/png",
-        )
-    
-    st.write("---")
-    st.subheader("Gerar noutros ângulos")
-    st.info("A funcionalidade para gerar noutros ângulos será implementada aqui.")
+        # Exibe o prompt em uma área de texto
+        st.text_area("Prompt:", value=st.session_state.prompt_text, height=200)
+
+        # HTML e JavaScript para o botão de copiar
+        # Usamos document.execCommand que é mais compatível em iframes do que navigator.clipboard
+        js_code = f"""
+        <script>
+        function copyToClipboard() {{
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = `{st.session_state.prompt_text.replace("`", "\\`")}`;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+            
+            // Fornece feedback visual no botão
+            const copyBtn = document.getElementById('copyBtn');
+            copyBtn.innerText = 'Copiado!';
+            copyBtn.disabled = true;
+            setTimeout(() => {{
+                copyBtn.innerText = 'Copiar Prompt';
+                copyBtn.disabled = false;
+            }}, 2000);
+        }}
+        </script>
+        <button id="copyBtn" onclick="copyToClipboard()">Copiar Prompt</button>
+        """
+        st.markdown(js_code, unsafe_allow_html=True)
 
 
-# --- Roteador Principal ---
-if st.session_state.page == 'config':
-    page_config()
-else:
-    page_results()
+if __name__ == "__main__":
+    main_app()
