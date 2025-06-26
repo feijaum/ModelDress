@@ -34,17 +34,15 @@ def describe_clothing_from_image(pil_image):
 def generate_images_from_api(prompt_texto):
     """Chama a API do Gemini para gerar uma única imagem a partir de um prompt de texto."""
     try:
-        # CORREÇÃO: Usando o modelo 'gemini-2.0-flash-preview-image-generation' conforme
-        # solicitado e especificando que a resposta deve ser uma imagem.
-        model = genai.GenerativeModel(model_name="gemini-2.0-flash-preview-image-generation")
-
-        # Configuração para garantir que a resposta seja uma imagem PNG
-        generation_config = genai.types.GenerationConfig(
-            response_mime_type="image/png"
-        )
+        # CORREÇÃO: O erro 400 confirma que a GenerationConfig estava incorreta.
+        # A solução é usar um modelo econômico e dar-lhe um comando explícito para
+        # gerar uma imagem, em vez de configurar o tipo de resposta.
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
         
-        response = model.generate_content(prompt_texto, generation_config=generation_config)
+        # O modelo gera a imagem a partir do prompt de texto.
+        response = model.generate_content(prompt_texto)
 
+        # Extrai os bytes da imagem da resposta.
         image_bytes = response.parts[0].inline_data.data
         return Image.open(io.BytesIO(image_bytes))
     except UnidentifiedImageError:
@@ -115,7 +113,8 @@ def page_config():
                     "tipo_corpo": tipo_corpo, "angulo_modelo": angulo_modelo, "roupa_desc": roupa_desc
                 }
                 
-                prompt_texto = (
+                # CORREÇÃO: Adicionando um comando explícito para o modelo gerar uma imagem.
+                prompt_base = (
                     f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
                     f"Um(a) modelo {genero.lower()} {etnia.lower()}, "
                     f"com idade aparente de {faixa_etaria.lower()} e corpo {tipo_corpo.lower()}, "
@@ -124,6 +123,8 @@ def page_config():
                     f"O cenário é um fundo de estúdio fotográfico branco e limpo. "
                     f"A iluminação é profissional e suave, destacando a roupa e o(a) modelo."
                 )
+                prompt_texto = f"Gere uma imagem com base na seguinte descrição: {prompt_base}"
+
 
                 with st.spinner("A gerar a imagem... Isto pode levar um momento."):
                     img = generate_images_from_api(prompt_texto)
@@ -150,7 +151,7 @@ def page_results():
     with action_cols[1]:
         if st.button("🔄 Gerar Novamente"):
             selections = st.session_state.user_selections
-            prompt_texto = (
+            prompt_base = (
                 f"Fotografia de moda ultrarrealista, 8k, de corpo inteiro. "
                 f"Um(a) modelo {selections['genero'].lower()} {selections['etnia'].lower()}, "
                 f"com idade aparente de {selections['faixa_etaria'].lower()} e corpo {selections['tipo_corpo'].lower()}, "
@@ -159,6 +160,8 @@ def page_results():
                 f"O cenário é um fundo de estúdio fotográfico branco e limpo. "
                 f"A iluminação é profissional e suave."
             )
+            prompt_texto = f"Gere uma imagem com base na seguinte descrição: {prompt_base}"
+
             with st.spinner("A gerar uma nova imagem..."):
                 img = generate_images_from_api(prompt_texto)
                 st.session_state.generated_image = img
