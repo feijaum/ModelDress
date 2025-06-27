@@ -30,12 +30,6 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
         )
         contents = [clothing_image, text_prompt]
         
-        generation_config = {
-            "response_modalities": ["IMAGE", "TEXT"],
-        }
-        
-        # CORREÇÃO: O erro 400 informou as categorias de segurança exatas que este modelo aceita.
-        # Estamos agora a desativar apenas essas categorias válidas para evitar o erro.
         safety_settings = [
             types.SafetySetting(
                 category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -55,26 +49,28 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
             ),
         ]
 
+        # A chamada à API é envolvida em um bloco try/except mais específico
         response = model.generate_content(
             contents,
-            generation_config=generation_config,
             safety_settings=safety_settings
         )
         
+        # Tentativa de extrair a imagem
         image_bytes = response.parts[0].inline_data.data
         return Image.open(io.BytesIO(image_bytes))
 
     except (UnidentifiedImageError, IndexError, AttributeError):
-        try:
-            if response and response.prompt_feedback:
-                return f"A geração da imagem foi bloqueada. Razão: {response.prompt_feedback}"
-            elif response and response.text:
-                 return response.text
-            else:
-                return f"A API retornou uma resposta inesperada que não é uma imagem: {response}"
-        except Exception as e:
-            return f"A API retornou uma resposta que não é uma imagem, mas a estrutura do erro é desconhecida. Erro interno: {e}"
+        # Este bloco é acionado se 'response' for um objeto válido, mas não contiver uma imagem.
+        if response and response.prompt_feedback:
+            return f"A geração da imagem foi bloqueada. Razão: {response.prompt_feedback}"
+        elif response and response.text:
+             return response.text
+        else:
+            # Se não houver feedback ou texto, a resposta é inesperada.
+            return f"A API retornou uma resposta inesperada que não é uma imagem. Resposta completa: {response}"
+            
     except Exception as e:
+        # Este bloco captura todos os outros erros, incluindo falhas na chamada da API.
         return f"Ocorreu um erro crítico na API: {e}"
 
 
@@ -108,7 +104,7 @@ def page_config():
 
     if st.session_state.api_error_response:
         st.error("A API não retornou uma imagem. Veja a resposta exata abaixo:")
-        st.text_area("Resposta recebida da API:", value=st.session_state.api_error_response, height=150)
+        st.text_area("Resposta recebida da API:", value=str(st.session_state.api_error_response), height=150)
         if st.button("OK, entendi"):
             st.session_state.api_error_response = None
             st.rerun()
