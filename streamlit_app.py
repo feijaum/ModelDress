@@ -24,6 +24,7 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
     Usa a lógica do Vertex AI para gerar uma imagem de um modelo
     vestindo uma roupa específica.
     """
+    response = None  # Inicializa a variável de resposta
     try:
         model = genai.GenerativeModel(
             model_name="gemini-2.0-flash-preview-image-generation"
@@ -41,11 +42,19 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
         return Image.open(io.BytesIO(image_bytes))
 
     except (UnidentifiedImageError, IndexError, AttributeError):
-        # MODIFICAÇÃO: Se não for uma imagem, captura e retorna a resposta de texto da API.
+        # MODIFICAÇÃO: Bloco de erro mais robusto para capturar a resposta exata da API.
         try:
-            return response.text
+            # A razão da recusa geralmente está no prompt_feedback
+            if response and response.prompt_feedback:
+                return f"A geração da imagem foi bloqueada. Razão: {response.prompt_feedback}"
+            # Se não houver prompt_feedback, tenta obter a resposta de texto.
+            elif response and response.text:
+                 return response.text
+            # Se tudo mais falhar, retorna a representação do objeto de resposta.
+            else:
+                return f"A API retornou uma resposta inesperada que não é uma imagem: {response}"
         except Exception:
-            return "A API retornou uma resposta que não é uma imagem, mas o texto da resposta não pôde ser lido."
+            return "A API retornou uma resposta que não é uma imagem, mas a estrutura do erro é desconhecida."
     except Exception as e:
         return f"Ocorreu um erro crítico na API: {e}"
 
