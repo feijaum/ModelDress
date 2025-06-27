@@ -30,18 +30,30 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
         )
         contents = [clothing_image, text_prompt]
         
-        # CORREÇÃO DEFINITIVA: O erro 400 indica que a modalidade da resposta
-        # deve ser declarada. Usamos a configuração do exemplo do Vertex AI,
-        # passada como um dicionário para evitar erros de tipo.
         generation_config = {
             "response_modalities": ["IMAGE", "TEXT"],
         }
         
-        # Desativando os filtros de segurança para evitar bloqueios
-        safety_settings = {
-            harm_category: types.HarmBlockThreshold.BLOCK_NONE
-            for harm_category in types.HarmCategory
-        }
+        # CORREÇÃO: O erro 400 informou as categorias de segurança exatas que este modelo aceita.
+        # Estamos agora a desativar apenas essas categorias válidas para evitar o erro.
+        safety_settings = [
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+        ]
 
         response = model.generate_content(
             contents,
