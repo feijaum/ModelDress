@@ -22,9 +22,10 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
     vestindo uma roupa específica.
     """
     try:
-        # Usando o modelo e a lógica do seu exemplo do Vertex AI
+        # CORREÇÃO: Usando o modelo 2.0 solicitado pelo usuário,
+        # com a estrutura de chamada correta.
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro-vision" # Modelo robusto para tarefas visuais
+            model_name="gemini-2.0-flash-preview-image-generation"
         )
 
         # Criamos o conteúdo multimodal: a imagem da roupa + o prompt de texto
