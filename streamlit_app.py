@@ -14,7 +14,6 @@ if 'generated_image' not in st.session_state:
     st.session_state.generated_image = None
 if 'user_selections' not in st.session_state:
     st.session_state.user_selections = {}
-# Novo estado para armazenar a resposta de erro da API
 if 'api_error_response' not in st.session_state:
     st.session_state.api_error_response = None
 
@@ -24,37 +23,38 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
     Usa a lógica do Vertex AI para gerar uma imagem de um modelo
     vestindo uma roupa específica.
     """
-    response = None  # Inicializa a variável de resposta
+    response = None
     try:
         model = genai.GenerativeModel(
             model_name="gemini-2.0-flash-preview-image-generation"
         )
         contents = [clothing_image, text_prompt]
-        generation_config = {
-            "response_modalities": ["IMAGE", "TEXT"],
+        
+        # CORREÇÃO: Adicionando os 'safety_settings' do exemplo do Vertex AI.
+        # Isto é crucial para evitar que a geração de imagem seja bloqueada.
+        safety_settings = {
+            harm_category: types.HarmBlockThreshold.BLOCK_NONE
+            for harm_category in types.HarmCategory
         }
+
         response = model.generate_content(
             contents,
-            generation_config=generation_config
+            safety_settings=safety_settings
         )
-        # Tenta extrair os dados da imagem. Se falhar, o bloco except será acionado.
+        
         image_bytes = response.parts[0].inline_data.data
         return Image.open(io.BytesIO(image_bytes))
 
     except (UnidentifiedImageError, IndexError, AttributeError):
-        # MODIFICAÇÃO: Bloco de erro mais robusto para capturar a resposta exata da API.
         try:
-            # A razão da recusa geralmente está no prompt_feedback
             if response and response.prompt_feedback:
                 return f"A geração da imagem foi bloqueada. Razão: {response.prompt_feedback}"
-            # Se não houver prompt_feedback, tenta obter a resposta de texto.
             elif response and response.text:
                  return response.text
-            # Se tudo mais falhar, retorna a representação do objeto de resposta.
             else:
                 return f"A API retornou uma resposta inesperada que não é uma imagem: {response}"
-        except Exception:
-            return "A API retornou uma resposta que não é uma imagem, mas a estrutura do erro é desconhecida."
+        except Exception as e:
+            return f"A API retornou uma resposta que não é uma imagem, mas a estrutura do erro é desconhecida. Erro interno: {e}"
     except Exception as e:
         return f"Ocorreu um erro crítico na API: {e}"
 
@@ -87,7 +87,6 @@ def page_config():
     st.title("👕 Provador Virtual com IA 👖")
     st.markdown("Use o menu ao lado para enviar a foto da sua roupa, configurar o modelo e deixar a IA do Vertex criar a imagem final.")
 
-    # MODIFICAÇÃO: Lógica para exibir o erro da API
     if st.session_state.api_error_response:
         st.error("A API não retornou uma imagem. Veja a resposta exata abaixo:")
         st.text_area("Resposta recebida da API:", value=st.session_state.api_error_response, height=150)
@@ -101,7 +100,6 @@ def page_config():
         if not uploaded_file:
             st.error("Por favor, envie a imagem de uma peça de roupa.")
         else:
-            # Limpa qualquer erro antigo antes de tentar novamente
             st.session_state.api_error_response = None
             with st.spinner("Gerando imagem com a nova lógica..."):
                 pil_image = Image.open(uploaded_file)
@@ -118,13 +116,11 @@ def page_config():
                 }
                 result = generate_dressed_model(pil_image, prompt_texto)
 
-                # Verifica se o resultado é uma imagem ou uma mensagem de erro (string)
                 if isinstance(result, Image.Image):
                     st.session_state.generated_image = result
                     st.session_state.page = 'results'
                     st.rerun()
                 else:
-                    # Armazena a mensagem de erro no estado e reinicia para exibi-la
                     st.session_state.api_error_response = result
                     st.rerun()
 
@@ -150,7 +146,6 @@ def page_results():
                     st.session_state.generated_image = result
                     st.rerun()
                 else:
-                    # Se falhar na nova tentativa, volta para a pág de config e mostra o erro
                     st.session_state.api_error_response = result
                     st.session_state.page = 'config'
                     st.rerun()
