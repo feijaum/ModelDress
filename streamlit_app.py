@@ -30,11 +30,19 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
         )
         contents = [clothing_image, text_prompt]
         
-        # CORREÇÃO: Adicionando os 'safety_settings' do exemplo do Vertex AI.
-        # Isto é crucial para evitar que a geração de imagem seja bloqueada.
+        # CORREÇÃO: O erro 400 informou as categorias de segurança exatas que este modelo aceita.
+        # Estamos agora a desativar apenas essas categorias válidas.
+        valid_harm_categories = [
+            types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+            # A categoria CIVIC_INTEGRITY não está no enum padrão, omitindo-a para evitar erros.
+        ]
+        
         safety_settings = {
-            harm_category: types.HarmBlockThreshold.BLOCK_NONE
-            for harm_category in types.HarmCategory
+            category: types.HarmBlockThreshold.BLOCK_NONE
+            for category in valid_harm_categories
         }
 
         response = model.generate_content(
