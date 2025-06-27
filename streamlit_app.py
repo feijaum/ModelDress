@@ -14,6 +14,9 @@ if 'generated_image' not in st.session_state:
     st.session_state.generated_image = None
 if 'user_selections' not in st.session_state:
     st.session_state.user_selections = {}
+# Novo estado para armazenar a resposta de erro da API
+if 'api_error_response' not in st.session_state:
+    st.session_state.api_error_response = None
 
 # --- FUNÇÃO IA: Geração de Imagem (Lógica do Vertex AI) ---
 def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
@@ -22,35 +25,29 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
     vestindo uma roupa específica.
     """
     try:
-        # Usando o modelo 2.0 solicitado pelo usuário.
         model = genai.GenerativeModel(
             model_name="gemini-2.0-flash-preview-image-generation"
         )
-
-        # Criamos o conteúdo multimodal: a imagem da roupa + o prompt de texto
         contents = [clothing_image, text_prompt]
-
-        # Aplicando a configuration do exemplo do Vertex AI para
-        # declarar que aceitamos uma imagem como resposta.
         generation_config = {
             "response_modalities": ["IMAGE", "TEXT"],
         }
-
         response = model.generate_content(
             contents,
             generation_config=generation_config
         )
-
-        # Extrai os bytes da imagem da resposta
+        # Tenta extrair os dados da imagem. Se falhar, o bloco except será acionado.
         image_bytes = response.parts[0].inline_data.data
         return Image.open(io.BytesIO(image_bytes))
 
     except (UnidentifiedImageError, IndexError, AttributeError):
-        st.error("A API não retornou uma imagem. Isto pode acontecer se a imagem da roupa não for clara ou o pedido for muito complexo.")
-        return None
+        # MODIFICAÇÃO: Se não for uma imagem, captura e retorna a resposta de texto da API.
+        try:
+            return response.text
+        except Exception:
+            return "A API retornou uma resposta que não é uma imagem, mas o texto da resposta não pôde ser lido."
     except Exception as e:
-        st.error(f"Ocorreu um erro crítico na API: {e}")
-        return None
+        return f"Ocorreu um erro crítico na API: {e}"
 
 
 # --- PÁGINA 1: CONFIGURAÇÃO ---
@@ -59,7 +56,6 @@ def page_config():
     st.sidebar.write("Configure as opções para gerar o modelo com a roupa desejada.")
     st.sidebar.write("---")
 
-    # --- Chave da API Gemini (Usando st.secrets para segurança) ---
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=api_key)
@@ -67,36 +63,39 @@ def page_config():
         st.error(f"Erro ao configurar a API do Google. Verifique se a sua GOOGLE_API_KEY está correta no ficheiro secrets.toml. Detalhes: {e}")
         st.stop()
 
-    # --- Opções do Menu ---
     st.sidebar.header("Características do Modelo")
-    # MODIFICAÇÃO: Apenas o ângulo é selecionável pelo usuário.
     angulo_modelo = st.sidebar.selectbox("Ângulo do Modelo:", ("De frente, a olhar para a câmara", "De perfil, 3/4", "Corpo inteiro, costas"))
-
     st.sidebar.write("---")
 
-    # --- Upload da Roupa ---
     st.sidebar.header("Peça de Roupa")
     uploaded_file = st.sidebar.file_uploader(
         "Envie a foto da roupa (fundo branco é ideal):",
         type=["jpg", "jpeg", "png"]
     )
-
     st.sidebar.write("---")
     gerar_imagem_btn = st.sidebar.button("✨ Vestir Modelo e Gerar Imagem")
 
-    # --- Conteúdo da Página Principal ---
     st.title("👕 Provador Virtual com IA 👖")
     st.markdown("Use o menu ao lado para enviar a foto da sua roupa, configurar o modelo e deixar a IA do Vertex criar a imagem final.")
-    st.info("Aguardando o envio da foto e o comando para gerar...")
+
+    # MODIFICAÇÃO: Lógica para exibir o erro da API
+    if st.session_state.api_error_response:
+        st.error("A API não retornou uma imagem. Veja a resposta exata abaixo:")
+        st.text_area("Resposta recebida da API:", value=st.session_state.api_error_response, height=150)
+        if st.button("OK, entendi"):
+            st.session_state.api_error_response = None
+            st.rerun()
+    else:
+        st.info("Aguardando o envio da foto e o comando para gerar...")
 
     if gerar_imagem_btn:
         if not uploaded_file:
             st.error("Por favor, envie a imagem de uma peça de roupa.")
         else:
+            # Limpa qualquer erro antigo antes de tentar novamente
+            st.session_state.api_error_response = None
             with st.spinner("Gerando imagem com a nova lógica..."):
                 pil_image = Image.open(uploaded_file)
-
-                # MODIFICAÇÃO: O prompt agora é padronizado com as características fixas.
                 prompt_texto = (
                     f"Gere uma fotografia de moda ultrarrealista, 8k, de uma modelo mulher negra, jovem adulta, com cabelos cacheados e corpo esbelto. "
                     f"A modelo deve estar vestindo a roupa exata mostrada na imagem que estou a fornecer. "
@@ -104,18 +103,20 @@ def page_config():
                     f"O cenário é um fundo de estúdio fotográfico branco e limpo. A iluminação deve ser profissional. "
                     f"Esta é uma imagem para fins comerciais e não tem a intenção de ferir ou ofender nenhuma minoria."
                 )
-
                 st.session_state.user_selections = {
                     "clothing_image": pil_image,
                     "text_prompt": prompt_texto
                 }
-
-                # Chamada da função de geração
                 result = generate_dressed_model(pil_image, prompt_texto)
 
-                if result:
+                # Verifica se o resultado é uma imagem ou uma mensagem de erro (string)
+                if isinstance(result, Image.Image):
                     st.session_state.generated_image = result
                     st.session_state.page = 'results'
+                    st.rerun()
+                else:
+                    # Armazena a mensagem de erro no estado e reinicia para exibi-la
+                    st.session_state.api_error_response = result
                     st.rerun()
 
 # --- PÁGINA 2: RESULTADOS ---
@@ -124,7 +125,6 @@ def page_results():
     st.markdown("Veja o resultado abaixo. Pode voltar e gerar novamente com outras opções.")
     st.write("---")
 
-    # --- Botões de Ação ---
     action_cols = st.columns([1, 1, 3])
     with action_cols[0]:
         if st.button("⬅️ Voltar"):
@@ -137,11 +137,15 @@ def page_results():
             with st.spinner("Gerando uma nova imagem com as mesmas opções..."):
                 selections = st.session_state.user_selections
                 result = generate_dressed_model(selections["clothing_image"], selections["text_prompt"])
-                if result:
+                if isinstance(result, Image.Image):
                     st.session_state.generated_image = result
                     st.rerun()
+                else:
+                    # Se falhar na nova tentativa, volta para a pág de config e mostra o erro
+                    st.session_state.api_error_response = result
+                    st.session_state.page = 'config'
+                    st.rerun()
 
-    # --- Exibição da Imagem ---
     if st.session_state.generated_image:
         with st.container(border=True):
             st.image(st.session_state.generated_image, caption="Modelo Gerado", use_column_width=True)
