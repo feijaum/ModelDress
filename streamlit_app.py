@@ -22,8 +22,7 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
     vestindo uma roupa específica.
     """
     try:
-        # CORREÇÃO: Usando o modelo 2.0 solicitado pelo usuário,
-        # com a estrutura de chamada correta.
+        # Usando o modelo 2.0 solicitado pelo usuário.
         model = genai.GenerativeModel(
             model_name="gemini-2.0-flash-preview-image-generation"
         )
@@ -31,7 +30,16 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
         # Criamos o conteúdo multimodal: a imagem da roupa + o prompt de texto
         contents = [clothing_image, text_prompt]
 
-        response = model.generate_content(contents)
+        # CORREÇÃO: Aplicando a configuration do exemplo do Vertex AI para
+        # declarar que aceitamos uma imagem como resposta.
+        generation_config = {
+            "response_modalities": ["IMAGE", "TEXT"],
+        }
+
+        response = model.generate_content(
+            contents,
+            generation_config=generation_config
+        )
 
         # Extrai os bytes da imagem da resposta
         image_bytes = response.parts[0].inline_data.data
