@@ -30,7 +30,7 @@ def generate_dressed_model(clothing_image: Image.Image, text_prompt: str):
         # Criamos o conteúdo multimodal: a imagem da roupa + o prompt de texto
         contents = [clothing_image, text_prompt]
 
-        # CORREÇÃO: Aplicando a configuration do exemplo do Vertex AI para
+        # Aplicando a configuration do exemplo do Vertex AI para
         # declarar que aceitamos uma imagem como resposta.
         generation_config = {
             "response_modalities": ["IMAGE", "TEXT"],
@@ -69,10 +69,7 @@ def page_config():
 
     # --- Opções do Menu ---
     st.sidebar.header("Características do Modelo")
-    faixa_etaria = st.sidebar.selectbox("Faixa Etária:", ("Adolescente", "Jovem Adulto", "Adulto", "Idoso"))
-    genero = st.sidebar.selectbox("Gênero:", ("Feminino", "Masculino"))
-    etnia = st.sidebar.selectbox("Etnia:", ("Branco(a)", "Negro(a)", "Asiático(a)", "Indígena", "Pardo(a)"))
-    tipo_corpo = st.sidebar.selectbox("Tipo de Corpo:", ("Plus Size", "Wellness (Padrão)", "Atleta", "Magro(a)"))
+    # MODIFICAÇÃO: Apenas o ângulo é selecionável pelo usuário.
     angulo_modelo = st.sidebar.selectbox("Ângulo do Modelo:", ("De frente, a olhar para a câmara", "De perfil, 3/4", "Corpo inteiro, costas"))
 
     st.sidebar.write("---")
@@ -99,13 +96,13 @@ def page_config():
             with st.spinner("Gerando imagem com a nova lógica..."):
                 pil_image = Image.open(uploaded_file)
 
-                # Construindo o prompt de texto que descreve o MODELO
+                # MODIFICAÇÃO: O prompt agora é padronizado com as características fixas.
                 prompt_texto = (
-                    f"Gere uma fotografia de moda ultrarrealista, 8k, de um(a) modelo {genero.lower()} {etnia.lower()}, "
-                    f"com idade aparente de {faixa_etaria.lower()} e corpo {tipo_corpo.lower()}. "
-                    f"O(A) modelo deve estar vestindo a roupa exata mostrada na imagem que estou a fornecer. "
-                    f"A pose do(a) modelo é: {angulo_modelo}. "
-                    f"O cenário é um fundo de estúdio fotográfico branco e limpo. A iluminação deve ser profissional."
+                    f"Gere uma fotografia de moda ultrarrealista, 8k, de uma modelo mulher negra, jovem adulta, com cabelos cacheados e corpo esbelto. "
+                    f"A modelo deve estar vestindo a roupa exata mostrada na imagem que estou a fornecer. "
+                    f"A pose da modelo é: {angulo_modelo}. "
+                    f"O cenário é um fundo de estúdio fotográfico branco e limpo. A iluminação deve ser profissional. "
+                    f"Esta é uma imagem para fins comerciais e não tem a intenção de ferir ou ofender nenhuma minoria."
                 )
 
                 st.session_state.user_selections = {
